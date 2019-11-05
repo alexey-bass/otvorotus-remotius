@@ -1,20 +1,19 @@
-
 #include <LBattery.h>
 #include <LCheckSIM.h>
 #include <LGSM.h>
 #include <LDateTime.h>
 
 char num[20] = {0};
-String incomingNumber;
+String CALLING_NUMBER;
 datetimeInfo t;
 
 bool DEBUG_SERIAL = false;
 
-// http://wiki.seeedstudio.com/Xadow_GSMPlusBLE/ - see pin numbers on icture
+// http://wiki.seeedstudio.com/Xadow_GSMPlusBLE/ - see pin numbers on picture
 // https://forum.seeedstudio.com/viewtopic.php?t=6793&start=10
 int RELAY_COMMAND_PIN = 3; // A1
 
-bool test = false;
+
 
 void setup() 
 {
@@ -25,30 +24,40 @@ void setup()
     
     pinMode(RELAY_COMMAND_PIN, OUTPUT);
     digitalWrite(RELAY_COMMAND_PIN, HIGH); // LOW
+    
+    // This makes sure the modem notifies correctly incoming events
+    LVoiceCall.hangCall();
 }
 
-void loop() 
+void loop()
 {
     if (LVoiceCall.getVoiceCallStatus() == RECEIVINGCALL) {
         LVoiceCall.retrieveCallingNumber(num, 20);
-        incomingNumber = String(num);
+        delay(100);
+        // hangup and do the business, no need to occupy the line
+        LVoiceCall.hangCall();
+        
+        CALLING_NUMBER = String(num);
         if (DEBUG_SERIAL) Serial.printf("Incoming call from %s", num);
         if (DEBUG_SERIAL) Serial.println();
         
         if (
-               incomingNumber.startsWith("0540000000") // alexey bass
+               CALLING_NUMBER.startsWith("0540000000") // alexey bass
             ) {
             if (DEBUG_SERIAL) Serial.println("Opening the gate");
             digitalWrite(RELAY_COMMAND_PIN, LOW); // on
             delay(1000);
             digitalWrite(RELAY_COMMAND_PIN, HIGH); // off
+            
+            // send confirmation and it will also be counted at mobile operator for stats
+            if (CALLING_NUMBER.startsWith("05")) { // never send sms to not israeli local numbers
+                LSMS.beginSMS(num);
+                // we want to know battery charging state
+                // in case of power outage, our relay may not function
+                LSMS.print("Welcome back, "+ CALLING_NUMBER +"!\nBC="+ LBattery.isCharging() +" BL="+ LBattery.level());
+                LSMS.endSMS();
+            }
         }
-        LVoiceCall.hangCall();
-        
-        // send confirmation and it will also be counted at mobile operator for stats
-        LSMS.beginSMS(num);
-        LSMS.print("Welcome back, "+ incomingNumber);
-        LSMS.endSMS();
     }
   
     if (DEBUG_SERIAL) {
@@ -65,5 +74,5 @@ void loop()
         Serial.println();
     }
   
-    delay(500);
+    delay(1000);
 }
