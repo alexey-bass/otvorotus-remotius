@@ -8,6 +8,11 @@ char num[20] = {0};
 String incomingNumber;
 datetimeInfo t;
 
+int statusCheckCount = 0;
+int statusCheckInterval = 600; // number of loops
+String statusReportPhone = "0540000000";
+String statusText;
+
 bool DEBUG_SERIAL = false;
 
 // http://wiki.seeedstudio.com/Xadow_GSMPlusBLE/ - see pin numbers on icture
@@ -63,6 +68,21 @@ void loop()
         Serial.println();
       
         Serial.println();
+    }
+    
+    statusCheckCount = (statusCheckCount + 1) % statusCheckInterval;
+    if (statusCheckCount == 0) {
+        statusText = "";
+
+        if (!LBattery.isCharging() && LBattery.level() < 30) {
+            statusText += "Battery level is less than 30%! "
+        }
+        
+        if (statusText.length() > 0) {
+            LSMS.beginSMS(statusReportPhone);
+            LSMS.print(statusText);
+            LSMS.endSMS();
+        }
     }
   
     delay(500);
