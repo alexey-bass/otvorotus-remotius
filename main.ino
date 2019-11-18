@@ -1,10 +1,10 @@
-
 #include <LBattery.h>
 #include <LCheckSIM.h>
 #include <LGSM.h>
 #include <LDateTime.h>
 
 char num[20] = {0};
+String CALLING_NUMBER;
 datetimeInfo t;
 
 unsigned long lastStatusCheckTime = 0;
@@ -13,11 +13,11 @@ String statusReportPhone = "0540000000";
 
 bool DEBUG_SERIAL = false;
 
-// http://wiki.seeedstudio.com/Xadow_GSMPlusBLE/ - see pin numbers on icture
+// http://wiki.seeedstudio.com/Xadow_GSMPlusBLE/ - see pin numbers on picture
 // https://forum.seeedstudio.com/viewtopic.php?t=6793&start=10
 int RELAY_COMMAND_PIN = 3; // A1
 
-bool test = false;
+
 
 void setup() 
 {
@@ -28,31 +28,37 @@ void setup()
     
     pinMode(RELAY_COMMAND_PIN, OUTPUT);
     digitalWrite(RELAY_COMMAND_PIN, HIGH); // LOW
+    
+    // This makes sure the modem notifies correctly incoming events
+    LVoiceCall.hangCall();
 }
 
-void loop() 
+void loop()
 {
     if (LVoiceCall.getVoiceCallStatus() == RECEIVINGCALL) {
-        LVoiceCall.retrieveCallingNumber(num, sizeof(num));
-        String incomingNumber = String(num);
+        LVoiceCall.retrieveCallingNumber(num, 20);
+        delay(100);
+        // hangup and do the business, no need to occupy the line
+        LVoiceCall.hangCall();
+        
+        CALLING_NUMBER = String(num);
         if (DEBUG_SERIAL) Serial.printf("Incoming call from %s", num);
         if (DEBUG_SERIAL) Serial.println();
 
-        bool authorizedUser = incomingNumber.startsWith("0540000000"); // alexey bass
-        
-        if (authorizedUser) {
+        if (
+               CALLING_NUMBER.startsWith("0540000000") // alexey bass
+        ) {
             if (DEBUG_SERIAL) Serial.println("Opening the gate");
             digitalWrite(RELAY_COMMAND_PIN, LOW); // on
             delay(1000);
             digitalWrite(RELAY_COMMAND_PIN, HIGH); // off
-
-            LVoiceCall.hangCall();
-
+            
             // send confirmation and it will also be counted at mobile operator for stats
-            sendSMS("Welcome back, " + incomingNumber, num);
-
-        } else {
-            LVoiceCall.hangCall();
+            if (CALLING_NUMBER.startsWith("05")) { // never send sms to not israeli local numbers
+                // we want to know battery charging state
+                // in case of power outage, our relay may not function
+                sendSMS("Welcome back, "+ CALLING_NUMBER +"!\nBC="+ LBattery.isCharging() +" BL="+ LBattery.level(), CALLING_NUMBER);
+            }
         }
     }
   
@@ -87,7 +93,7 @@ void loop()
         }
     }
   
-    delay(500);
+    delay(1000);
 }
 
 void sendSMS(String message, String phoneNumber)
