@@ -5,13 +5,11 @@
 #include <LDateTime.h>
 
 char num[20] = {0};
-String incomingNumber;
 datetimeInfo t;
 
-int statusCheckCount = 0;
-int statusCheckInterval = 600; // number of loops
+unsigned long lastStatusCheckTime = 0;
+unsigned long statusCheckIntervalMs = 300000;
 String statusReportPhone = "0540000000";
-String statusText;
 
 bool DEBUG_SERIAL = false;
 
@@ -35,25 +33,27 @@ void setup()
 void loop() 
 {
     if (LVoiceCall.getVoiceCallStatus() == RECEIVINGCALL) {
-        LVoiceCall.retrieveCallingNumber(num, 20);
-        incomingNumber = String(num);
+        LVoiceCall.retrieveCallingNumber(num, sizeof(num));
+        String incomingNumber = String(num);
         if (DEBUG_SERIAL) Serial.printf("Incoming call from %s", num);
         if (DEBUG_SERIAL) Serial.println();
+
+        bool authorizedUser = incomingNumber.startsWith("0540000000"); // alexey bass
         
-        if (
-               incomingNumber.startsWith("0540000000") // alexey bass
-            ) {
+        if (authorizedUser) {
             if (DEBUG_SERIAL) Serial.println("Opening the gate");
             digitalWrite(RELAY_COMMAND_PIN, LOW); // on
             delay(1000);
             digitalWrite(RELAY_COMMAND_PIN, HIGH); // off
+
+            LVoiceCall.hangCall();
+
+            // send confirmation and it will also be counted at mobile operator for stats
+            sendSMS("Welcome back, " + incomingNumber, num);
+
+        } else {
+            LVoiceCall.hangCall();
         }
-        LVoiceCall.hangCall();
-        
-        // send confirmation and it will also be counted at mobile operator for stats
-        LSMS.beginSMS(num);
-        LSMS.print("Welcome back, "+ incomingNumber);
-        LSMS.endSMS();
     }
   
     if (DEBUG_SERIAL) {
@@ -70,20 +70,29 @@ void loop()
         Serial.println();
     }
     
-    statusCheckCount = (statusCheckCount + 1) % statusCheckInterval;
-    if (statusCheckCount == 0) {
-        statusText = "";
+    unsigned long timeSinceStart = millis();
+    if (!lastStatusCheckTime
+        || timeSinceStart < lastStatusCheckTime // millis() overflow
+        || timeSinceStart - lastStatusCheckTime >= statusCheckIntervalMs) {
+
+        String statusText = "";
+        lastStatusCheckTime = timeSinceStart;
 
         if (!LBattery.isCharging() && LBattery.level() < 30) {
             statusText += "Battery level is less than 30%! "
         }
         
         if (statusText.length() > 0) {
-            LSMS.beginSMS(statusReportPhone);
-            LSMS.print(statusText);
-            LSMS.endSMS();
+            sendSMS(statusText, statusReportPhone);
         }
     }
   
     delay(500);
+}
+
+void sendSMS(String message, String phoneNumber)
+{
+    LSMS.beginSMS(phoneNumber.c_str());
+    LSMS.print(message.c_str());
+    LSMS.endSMS();
 }
