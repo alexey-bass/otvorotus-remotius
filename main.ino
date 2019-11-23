@@ -8,7 +8,7 @@ String CALLING_NUMBER;
 datetimeInfo t;
 
 unsigned long lastStatusCheckTime = 0;
-unsigned long statusCheckIntervalMs = 300000;
+unsigned long statusCheckIntervalMs = 60 * 60 * 1000; // 1 hour
 String statusReportPhone = "0540000000";
 
 bool DEBUG_SERIAL = false;
@@ -84,8 +84,9 @@ void loop()
         String statusText = "";
         lastStatusCheckTime = timeSinceStart;
 
-        if (!LBattery.isCharging() && LBattery.level() < 30) {
-            statusText += "Battery level is less than 30%! "
+        int currentLevel = LBattery.level()
+        if (!LBattery.isCharging() && currentLevel < 30) {
+            statusText += "Battery level is " + currentLevel + "%";
         }
         
         if (statusText.length() > 0) {
