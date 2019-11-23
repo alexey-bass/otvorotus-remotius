@@ -7,6 +7,10 @@ char num[20] = {0};
 String CALLING_NUMBER;
 datetimeInfo t;
 
+unsigned long lastStatusCheckTime = 0;
+unsigned long statusCheckIntervalMs = 60 * 60 * 1000; // 1 hour
+String statusReportPhone = "0540000000";
+
 bool DEBUG_SERIAL = false;
 
 // http://wiki.seeedstudio.com/Xadow_GSMPlusBLE/ - see pin numbers on picture
@@ -40,10 +44,10 @@ void loop()
         CALLING_NUMBER = String(num);
         if (DEBUG_SERIAL) Serial.printf("Incoming call from %s", num);
         if (DEBUG_SERIAL) Serial.println();
-        
+
         if (
                CALLING_NUMBER.startsWith("0540000000") // alexey bass
-            ) {
+        ) {
             if (DEBUG_SERIAL) Serial.println("Opening the gate");
             digitalWrite(RELAY_COMMAND_PIN, LOW); // on
             delay(1000);
@@ -51,11 +55,9 @@ void loop()
             
             // send confirmation and it will also be counted at mobile operator for stats
             if (CALLING_NUMBER.startsWith("05")) { // never send sms to not israeli local numbers
-                LSMS.beginSMS(num);
                 // we want to know battery charging state
                 // in case of power outage, our relay may not function
-                LSMS.print("Welcome back, "+ CALLING_NUMBER +"!\nBC="+ LBattery.isCharging() +" BL="+ LBattery.level());
-                LSMS.endSMS();
+                sendSMS("Welcome back, "+ CALLING_NUMBER +"!\nBC="+ LBattery.isCharging() +" BL="+ LBattery.level(), CALLING_NUMBER);
             }
         }
     }
@@ -73,6 +75,31 @@ void loop()
       
         Serial.println();
     }
+    
+    unsigned long timeSinceStart = millis();
+    if (!lastStatusCheckTime
+        || timeSinceStart < lastStatusCheckTime // millis() overflow
+        || timeSinceStart - lastStatusCheckTime >= statusCheckIntervalMs) {
+
+        String statusText = "";
+        lastStatusCheckTime = timeSinceStart;
+
+        int currentLevel = LBattery.level()
+        if (!LBattery.isCharging() && currentLevel < 30) {
+            statusText += "Battery level is " + currentLevel + "%";
+        }
+        
+        if (statusText.length() > 0) {
+            sendSMS(statusText, statusReportPhone);
+        }
+    }
   
     delay(1000);
+}
+
+void sendSMS(String message, String phoneNumber)
+{
+    LSMS.beginSMS(phoneNumber.c_str());
+    LSMS.print(message.c_str());
+    LSMS.endSMS();
 }
